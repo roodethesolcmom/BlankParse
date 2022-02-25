@@ -1,0 +1,123 @@
+version: '3.3'
+services:
+  app:
+    container_name: app
+    restart: always
+    command: bash wake.sh
+    env_file: .env
+    build: .
+    networks:
+      - db_net
+      - web
+    depends_on:
+      - db
+
+  nginx:
+    container_name: nginx
+    restart: always
+    image: "nginx:latest"    
+    ports:
+      - "80:80"
+      - "8443:8443"
+      - "3000:3000"
+      - "8080:8080"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - ./certs:/etc/nginx/certs
+    networks:
+      - web
+      - db_net
+    depends_on:
+      - app
+      - db
+    pid: "host"
+
+  db:
+    container_name: postgres
+    restart: always
+    image: postgres
+    env_file: .env
+    environment:
+      POSTGRES_DB: 'postgres'
+      POSTGRES_USER: 'postgres'
+      POSTGRES_PASSWORD: 'password'
+    volumes:
+      - app_data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432"
+    networks:
+      - web
+      - db_net
+
+  renderer:
+    image: grafana/grafana-image-renderer:latest
+    ports:
+      - "8081:8081"
+    networks:
+      - web
+      - db_net
+
+  grafana:
+    # Image tag (replace with yours)
+    image: grafana/grafana-enterprise
+    environment:
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: db:5432
+      # Database name (replace with yours)
+      GF_DATABASE_NAME: postgres
+      # Database user (replace with yours)
+      GF_DATABASE_USER: postgres
+      # Database password (replace with yours)
+      GF_DATABASE_PASSWORD: password
+      # Grafana domain (replace with yours)
+      GF_SERVER_DOMAIN: 92.255.110.178
+      # Grafana URL (replace with yours)
+      GF_SERVER_ROOT_URL: https://92.255.110.178:3000
+      # Grafana user (replace with yours)
+      GF_SECURITY_ADMIN_USER: admin
+      # Grafana password (replace with yours)
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_AUTH_ANONYMOUS_DISABLE_LOGIN_FORM: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      # Grafana plugins (replace with yours)
+      GF_USERS_LOGIN_HINT: username
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+      GF_LOG_FILTERS: rendering:debug
+    restart: unless-stopped
+    depends_on:
+      - db
+    networks:
+      - web
+      - db_net
+  graphql:
+    image: hasura/graphql-engine:v2.1.1
+    depends_on:
+    - db
+    restart: always
+    environment:
+      ## postgres database to store Hasura metadata
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgres://postgres:password@db:5432/postgres
+      ## this env var can be used to add the above postgres database to Hasura as a data source. this can be removed/updated based on your needs
+      PG_DATABASE_URL: postgres://postgres:password@db:5432/postgres
+      ## enable the console served by server
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true" # set to "false" to disable console
+      ## enable debugging mode. It is recommended to disable this in production
+      HASURA_GRAPHQL_DEV_MODE: "true"
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup, http-log, webhook-log, websocket-log, query-log
+      ## uncomment next line to set an admin secret
+      # HASURA_GRAPHQL_ADMIN_SECRET: adminsecretkey
+    networks:
+      - web
+      - db_net
+
+
+networks:
+  db_net:
+  web:
+
+volumes:
+  app_data:
+
+ 
